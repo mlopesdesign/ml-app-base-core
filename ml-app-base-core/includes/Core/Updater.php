@@ -6,7 +6,7 @@
  * ML_App_Base_Core_Updater class with no third-party dependency. Hooks into
  * the native WordPress update flow via pre_set_site_transient_update_plugins
  * and friends, so installs can update themselves straight from the GitHub
- * release asset attached to mlopesdesign/ml-app-base-core.
+ * release asset attached to mlopesdesign/ml-app-base-core-releases.
  *
  * If the GitHub endpoint is unreachable or the release payload is empty the
  * updater silently no-ops, never interfering with the existing plugin
@@ -60,7 +60,6 @@ final class ML_App_Base_Core_Updater {
 	public function hooks() {
 		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'check_update' ] );
 		add_filter( 'plugins_api', [ $this, 'plugin_info' ], 20, 3 );
-		add_filter( 'upgrader_post_install', [ $this, 'after_install' ], 10, 3 );
 	}
 
 	/**
@@ -74,32 +73,46 @@ final class ML_App_Base_Core_Updater {
 			return $transient;
 		}
 
-		$release = $this->get_latest_release();
-		if ( ! $release ) {
-			return $transient;
-		}
+		$release        = $this->get_latest_release();
+		$remote_version = $release ? $this->normalize_version( (string) ( $release['tag_name'] ?? '' ) ) : '';
+		$package        = '' !== $remote_version ? $this->find_zip_url( $release, $remote_version ) : '';
 
-		$remote_version = $this->normalize_version( (string) ( $release['tag_name'] ?? '' ) );
-		if ( '' === $remote_version ) {
-			return $transient;
-		}
+		$item = (object) [
+			'id'            => 'github.com/' . $this->github_repo,
+			'slug'          => $this->plugin_slug,
+			'plugin'        => $this->plugin_file,
+			'new_version'   => $remote_version,
+			'url'           => 'https://github.com/' . $this->github_repo,
+			'package'       => $package,
+			'icons'         => $this->icons(),
+			'banners'       => [],
+			'banners_rtl'   => [],
+			'tested'        => '6.8',
+			'requires'      => '6.0',
+			'requires_php'  => '7.4',
+			'compatibility' => new \stdClass(),
+		];
 
-		if ( version_compare( $this->current_version, $remote_version, '<' ) ) {
-			$transient->response[ $this->plugin_file ] = (object) [
-				'id'            => 'github.com/' . $this->github_repo,
-				'slug'          => $this->plugin_slug,
-				'plugin'        => $this->plugin_file,
-				'new_version'   => $remote_version,
-				'url'           => 'https://github.com/' . $this->github_repo,
-				'package'       => $this->find_zip_url( $release, $remote_version ),
-				'icons'         => [],
-				'banners'       => [],
-				'banners_rtl'   => [],
-				'tested'        => '6.8',
-				'requires'      => '6.0',
-				'requires_php'  => '7.4',
-				'compatibility' => new \stdClass(),
-			];
+		if ( '' !== $package && version_compare( $this->current_version, $remote_version, '<' ) ) {
+			if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+				$transient->response = [];
+			}
+			$transient->response[ $this->plugin_file ] = $item;
+			if ( isset( $transient->no_update ) && is_array( $transient->no_update ) ) {
+				unset( $transient->no_update[ $this->plugin_file ] );
+			}
+		} else {
+			// Sem versao nova (ou sem o ZIP exato): no_update, para o WP mostrar o estado certo
+			// e o controle de atualizacao automatica.
+			$item->new_version = $this->current_version;
+			$item->package     = '';
+			if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+				$transient->no_update = [];
+			}
+			$transient->no_update[ $this->plugin_file ] = $item;
+			if ( isset( $transient->response ) && is_array( $transient->response ) ) {
+				unset( $transient->response[ $this->plugin_file ] );
+			}
 		}
 
 		return $transient;
@@ -133,6 +146,9 @@ final class ML_App_Base_Core_Updater {
 		}
 
 		$download_url = $this->find_zip_url( $release, $remote_version );
+		if ( '' === $download_url ) {
+			return $result;
+		}
 
 		return (object) [
 			'name'           => 'ML App Base Core',
@@ -152,48 +168,14 @@ final class ML_App_Base_Core_Updater {
 				'changelog'   => '<pre>' . esc_html( (string) ( $release['body'] ?? '' ) ) . '</pre>',
 			],
 			'banners'        => [],
-			'icons'          => [],
+			'icons'          => $this->icons(),
 		];
 	}
 
-	/**
-	 * Normalizes the installed plugin folder after the upgrader has unpacked the asset.
-	 *
-	 * @param bool|\WP_Error $response   Installation response.
-	 * @param array           $hook_extra Upgrader hook data.
-	 * @param array           $result     Installation result.
-	 * @return bool|\WP_Error
-	 */
-	public function after_install( $response, $hook_extra, $result ) {
-		unset( $result );
-
-		if ( empty( $hook_extra['plugin'] ) || $hook_extra['plugin'] !== $this->plugin_file ) {
-			return $response;
-		}
-
-		global $wp_filesystem;
-		if ( ! is_object( $wp_filesystem ) ) {
-			return $response;
-		}
-
-		$install_dir = trailingslashit( (string) ( $result['destination'] ?? '' ) );
-		$target_dir  = trailingslashit( WP_PLUGIN_DIR . '/' . $this->plugin_slug );
-
-		if ( $install_dir && $install_dir !== $target_dir ) {
-			$inner = trailingslashit( $install_dir . $this->plugin_slug );
-			if ( $wp_filesystem->is_dir( $inner ) ) {
-				$install_dir = $inner;
-			}
-			$wp_filesystem->move( untrailingslashit( $install_dir ), untrailingslashit( $target_dir ), true );
-			$result['destination'] = untrailingslashit( $target_dir );
-		}
-
-		if ( function_exists( 'activate_plugin' ) ) {
-			activate_plugin( $this->plugin_file );
-		}
-
-		return $response;
-	}
+	// after_install() removido na 1.1.1: na 1.1.0 ele fazia unset($result) e depois usava
+	// $result['destination'], o que levava a $wp_filesystem->move('', <pasta do plugin>, true) e
+	// APAGAVA a pasta do plugin a cada atualizacao automatica. O ZIP oficial ja vem com a pasta
+	// certa (ml-app-base-core/), entao nenhum ajuste pos-instalacao e necessario.
 
 	/**
 	 * Retrieves the latest stable GitHub release.
@@ -205,6 +187,7 @@ final class ML_App_Base_Core_Updater {
 		if ( false !== $cached ) {
 			return ! empty( $cached ) && is_array( $cached ) ? $cached : null;
 		}
+		$fail_ttl = 15 * MINUTE_IN_SECONDS;
 
 		$url = 'https://api.github.com/repos/' . $this->github_repo . '/releases/latest';
 
@@ -221,18 +204,21 @@ final class ML_App_Base_Core_Updater {
 		);
 
 		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
-			set_transient( $this->transient_key, [], 6 * HOUR_IN_SECONDS );
+			set_transient( $this->transient_key, [], $fail_ttl );
 			return null;
 		}
 
 		$data = json_decode( (string) wp_remote_retrieve_body( $response ), true );
 
 		if ( ! is_array( $data ) || '' === $this->normalize_version( (string) ( $data['tag_name'] ?? '' ) ) ) {
-			set_transient( $this->transient_key, [], 6 * HOUR_IN_SECONDS );
+			set_transient( $this->transient_key, [], $fail_ttl );
 			return null;
 		}
 
-		set_transient( $this->transient_key, $data, 6 * HOUR_IN_SECONDS );
+		$remote = $this->normalize_version( (string) $data['tag_name'] );
+		// Release ainda sem o ZIP exato (asset em upload): cache curto para nao atrasar a oferta.
+		$ttl = '' !== $this->find_zip_url( $data, $remote ) ? 6 * HOUR_IN_SECONDS : $fail_ttl;
+		set_transient( $this->transient_key, $data, $ttl );
 
 		return $data;
 	}
@@ -255,16 +241,22 @@ final class ML_App_Base_Core_Updater {
 			}
 		}
 
-		// Fallback: any .zip asset whose name contains the slug and the version.
-		foreach ( ( $release['assets'] ?? [] ) as $asset ) {
-			$name = strtolower( (string) ( $asset['name'] ?? '' ) );
-			$url  = (string) ( $asset['browser_download_url'] ?? '' );
-			if ( '' !== $url && str_ends_with( $name, '.zip' ) && str_contains( $name, $this->plugin_slug ) && str_contains( $name, $remote_version ) ) {
-				return $url;
-			}
-		}
+		// Sem fallback para "outro ZIP" ou para o zipball do GitHub (pasta com nome errado):
+		// sem o asset exato, nao ha oferta de atualizacao.
+		return '';
+	}
 
-		return 'https://github.com/' . $this->github_repo . '/archive/refs/tags/v' . $remote_version . '.zip';
+	/**
+	 * Icones da tela de atualizacoes.
+	 *
+	 * @return array
+	 */
+	private function icons() {
+		return [
+			'1x'      => ML_APP_BASE_CORE_URL . 'assets/images/icon-128x128.png',
+			'2x'      => ML_APP_BASE_CORE_URL . 'assets/images/icon-256x256.png',
+			'default' => ML_APP_BASE_CORE_URL . 'assets/images/icon-256x256.png',
+		];
 	}
 
 	/**

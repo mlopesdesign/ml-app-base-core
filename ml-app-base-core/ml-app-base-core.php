@@ -3,10 +3,11 @@
  * Plugin Name: ML App Base Core
  * Plugin URI:  https://mlopesdesign.com.br
  * Description: Base WordPress backend for reusable native mobile apps: auth, users, devices, FCM push, internal notifications, menu/cardapio, home, news, events, photo albums, settings, logs and debugging.
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      ML Lopes Design
  * Author URI:  https://mlopesdesign.com.br
  * Text Domain: ml-app-base-core
+ * Update URI:  https://github.com/mlopesdesign/ml-app-base-core-releases
  * Domain Path: /languages
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -17,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'ML_APP_BASE_CORE_VERSION',  '1.1.0' );
+define( 'ML_APP_BASE_CORE_VERSION',  '1.1.1' );
 define( 'ML_APP_BASE_CORE_FILE',     __FILE__ );
 define( 'ML_APP_BASE_CORE_PATH',     plugin_dir_path( __FILE__ ) );
 define( 'ML_APP_BASE_CORE_URL',      plugin_dir_url( __FILE__ ) );
@@ -75,11 +76,11 @@ ml_app_base_core();
 
 
 
-if ( class_exists( 'ML_App_Base_Core' ) ) {
+if ( class_exists( 'ML_App_Base_Core_Updater' ) ) {
     $ml_app_base_updater = new ML_App_Base_Core_Updater(
         ML_APP_BASE_CORE_BASENAME,
         'ml-app-base-core',
-        'mlopesdesign/ml-app-base-core',
+        'mlopesdesign/ml-app-base-core-releases',
         ML_APP_BASE_CORE_VERSION
     );
     $ml_app_base_updater->hooks();
