@@ -16,7 +16,9 @@ class ML_App_Base_Content_Admin {
             'ML App Base Content',
             'ML App Base Content',
             'manage_options',
-            'ml-app-base-core',
+            // Slug proprio: antes usava 'ml-app-base-core', o mesmo do menu principal, e os
+            // submenus Cardapios/Categorias/Itens davam 403.
+            'ml-app-base-content',
             array( $this, 'display_plugin_setup_page' ),
             'dashicons-rest-api',
             31
@@ -24,12 +26,12 @@ class ML_App_Base_Content_Admin {
     }
 
     public function enqueue_assets( $hook ) {
-        if ( 'toplevel_page_ml-app-base-core' !== $hook ) {
+        if ( 'toplevel_page_ml-app-base-content' !== $hook ) {
             return;
         }
 
         wp_enqueue_style( 'ml-app-base-core-admin', ML_APP_BASE_CONTENT_URL . 'assets/admin.css', array(), ML_APP_BASE_CONTENT_VERSION, 'all' );
-        wp_enqueue_script( 'ml-app-base-core-admin', ML_APP_BASE_CONTENT_URL . 'assets/admin.js', array(), ML_APP_BASE_CONTENT_VERSION, true );
+        wp_enqueue_script( 'ml-app-base-core-admin', ML_APP_BASE_CONTENT_URL . 'assets/content-admin.js', array(), ML_APP_BASE_CONTENT_VERSION, true );
     }
 
     public function save_settings() {
@@ -43,7 +45,7 @@ class ML_App_Base_Content_Admin {
         wp_safe_redirect(
             add_query_arg(
                 array(
-                    'page'    => 'ml-app-base-core',
+                    'page'    => 'ml-app-base-content',
                     'updated' => '1',
                     'tab'     => isset( $_POST['active_tab'] ) ? sanitize_key( wp_unslash( $_POST['active_tab'] ) ) : 'home',
                 ),
@@ -64,7 +66,7 @@ class ML_App_Base_Content_Admin {
         wp_safe_redirect(
             add_query_arg(
                 array(
-                    'page'  => 'ml-app-base-core',
+                    'page'  => 'ml-app-base-content',
                     'cache' => 'cleared',
                     'tab'   => 'status',
                 ),

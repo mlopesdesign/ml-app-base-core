@@ -60,14 +60,12 @@ class ML_App_Base_Core_Admin {
 	}
 
 	public static function enqueue_assets( $hook ) {
-		$allowed_hooks = array(
-			'toplevel_page_ml-app-base-core',
-			'mlab-app_page_ml-app-base-core-cardapios',
-			'mlab-app_page_ml-app-base-core-categories',
-			'mlab-app_page_ml-app-base-core-items',
-		);
-
-		if ( ! in_array( $hook, $allowed_hooks, true ) ) {
+		// O prefixo do hook dos submenus deriva do titulo do menu ("ML App Base" ->
+		// "ml-app-base_page_..."); antes a lista tinha "mlab-app_page_..." e os estilos nao
+		// carregavam nas paginas de Cardapios/Categorias/Itens.
+		$is_main = 'toplevel_page_ml-app-base-core' === $hook;
+		$is_sub  = (bool) preg_match( '/_page_ml-app-base-core-(cardapios|categories|items)$/', (string) $hook );
+		if ( ! $is_main && ! $is_sub ) {
 			return;
 		}
 
